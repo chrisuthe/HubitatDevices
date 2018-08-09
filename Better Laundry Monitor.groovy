@@ -33,7 +33,7 @@ preferences {
 section ("Power Thresholds", hidden: true, hideable: true) {
     input "startThreshold", "decimal", title: "start cycle when power raises above (W)", description: "8", required: true
     input "endThreshold", "decimal", title: "stop cycle when power drops below (W)", description: "4", required: true
-    input "delayEnd", "number", title: "stop only after the power has been above the threashold for this many reportings:", description: "2", required: false
+    input "delayEnd", "number", title: "stop only after the power has been below the threashold for this many reportings:", description: "2", required: false
   }
 
 section ("Send this message") {
