@@ -26,6 +26,7 @@ definition(
   iconX2Url: "https://s3.amazonaws.com/smartthings-device-icons/Appliances/appliances8-icn@2x.png")
 
 
+
 preferences {
   section ("When this device stops drawing power") {
     input "meter", "capability.powerMeter", multiple: false, required: true
@@ -46,19 +47,24 @@ section ("Send this message") {
     input "player", "capability.musicPlayer", title:"Speak Via: (Music Player -> TTS)",multiple: true, required: false
     input "phone", "phone", title: "Send a text message to:", required: false
   }
+	section (title: "Logging"){
+		 input name: "debugOutput", type: "bool", title: "Enable debug logging?", defaultValue: true
+	}
 }
 
 def installed() {
-  log.debug "Installed with settings: ${settings}"
+  logDebug "Installed with settings: ${settings}"
 
   initialize()
 }
 
 def updated() {
-  log.debug "Updated with settings: ${settings}"
+  logDebug "Updated with settings: ${settings}"
 
   unsubscribe()
   initialize()
+  unschedule()
+  if (debugOutput) runIn(1800,logsOff)
 }
 
 def initialize() {
@@ -67,29 +73,29 @@ def initialize() {
   atomicState.powerOffDelay = 0
     if(!delayEnd) {
         delayEnd = 0;
-        log.trace "Set End Delay to Zero"
+        logDebug "Set End Delay to Zero"
     }
-  log.trace delayEnd
+  logDebug delayEnd
 }
 
 def handler(evt) {
   def latestPower = meter.currentValue("power")
-  log.trace "Power: ${latestPower}W"
-  log.trace "State: ${atomicState.cycleOn}"
+  logDebug "Power: ${latestPower}W"
+  logDebug "State: ${atomicState.cycleOn}"
 
   //Added latestpower < 1000 to deal with spikes that triggered false alarms
-  if (!atomicState.cycleOn && latestPower >= startThreshold && latestPower) {
+  if (!atomicState.cycleOn && latestPower >= startThreshold && latestPower < 10000) {
     atomicState.cycleOn = true   
-    log.trace "Cycle started."
+    log.info "Cycle started."
   }
   //first timew we are below the threashhold, hold and wait for a second.
   else if (atomicState.cycleOn && latestPower < endThreshold && atomicState.powerOffDelay < delayEnd){
   	atomicState.powerOffDelay = atomicState.powerOffDelay + 1
-      log.trace "We hit delay ${atomicState.powerOffDelay} times"
+      logDebug "We hit delay ${atomicState.powerOffDelay} times"
   }
     //Reset Delay if it only happened once
   else if (atomicState.cycleOn && latestPower >= endThreshold && atomicState.powerOffDelay != 0) {
-      log.trace "We hit the delay ${atomicState.powerOffDelay} times but cleared it"
+      logDebug "We hit the delay ${atomicState.powerOffDelay} times but cleared it"
       atomicState.powerOffDelay = 0;
       
     }
@@ -102,10 +108,20 @@ def handler(evt) {
     atomicState.cycleEnd = now()
     atomicState.powerOffDelay = 0
     
-    log.trace "State: ${atomicState.cycleOn}"
+	  log.info "State: ${atomicState.cycleOn} - Cycle Finished"
   }
 }
 
+def logsOff(){
+log.warn "debug logging disabled..."
+device.updateSetting("debugOutput",[value:"false",type:"bool"])
+}
+
+private logDebug(msg) {
+if (settings?.debugOutput || settings?.debugOutput == null) {
+log.debug "$msg"
+}
+}
 
 private send(msg) {
   if (sendPushMessage) {
@@ -116,7 +132,7 @@ private send(msg) {
     sendSms(phone, msg)
   }
 
-  log.debug msg
+  logDebug msg
 }
 
 private speakMessage(msg) {
