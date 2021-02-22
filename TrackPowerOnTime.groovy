@@ -46,9 +46,13 @@ def mainPage() {
             paragraph "Number of cycles: ${state.cycleCount}"
             /*if the state.onTime is < 750 it's going to round down to zero with the indiv and toss a divide by zero error. since it's
             in milleseconds this will not be true frequently past the first run but checking cycleCount would mean we couldn't garuntee a lack of error.*/
-            if(state.onTime > 750){
-                paragraph "Number of minutes: ${(state.onTime.intdiv(1000)).intdiv(60)}"
-                paragraph "Minutes per cycle: ${((state.onTime.intdiv(1000)).intdiv(60)) / (state.cycleCount)}"
+            if(state.onTime > 750 && state.cycleCount > 0){
+                paragraph "Number of minutes on: ${(state.onTime.intdiv(1000)).intdiv(60)}"
+                paragraph "Average minutes per cycle: ${((state.onTime.intdiv(1000)).intdiv(60)) / (state.cycleCount)}"
+            }
+            if(state.offTime > 750 && state.cycleCount > 0){
+                paragraph "Number of minutes off: ${(state.offTime.intdiv(1000)).intdiv(60)}"
+                paragraph "Average minutes between cycle: ${((state.offTime.intdiv(1000)).intdiv(60)) / (state.cycleCount)}"
             }
             //The Button Handler below picks up every push of this button without any additional wire up.
             input "resetStats", "button", title: "Reset Stats"
@@ -62,6 +66,8 @@ preferences {
 
 def installed() {
 	logDebug "Installed with settings: ${settings}"
+    state.on=false
+    state.lastOff=now()
 	initialize()
 }
 
@@ -75,15 +81,20 @@ def updated() {
 
 def initialize() {
 	subscribe(monitor, "power", powerChange)
+    
   	//since this gets run every time we update the app (AKA hit "Done") we only want to reset these values when we manually push reset, we do want to make sure the exist the first time though.
     if(!state.onTime)
         state.onTime=0
     if(!state.cycleCount)
         state.cycleCount=0
     if(!state.timer)
-        state.timer= 0
+        state.timer=0
     if(!state.on)
         state.on= false
+    if(!state.lastOff)
+        state.lastOff=now()
+    if(!state.offTime)
+        state.offTime=0
 	logDebug "Initialized! ${state.onTime} minutes of on time"
     logDebug "${state.cycleCount} on/off cycles"
 }
@@ -96,14 +107,20 @@ def powerChange(evt)
     logDebug powerNumber
     def now = now()
     //This is where we start a new on/off cycle if the if checks true
-    if(powerNumber > startThreshold && state.on==false)
+    if(state.on==true && powerNumber > startThreshold){
+        logDebug "Still On"
+        return
+    }
+    else if(powerNumber > startThreshold && state.on==false)
     {
         logDebug "Power Above zero start timer"
         state.timer=now
-        state.on=true   
+        state.on=true  
         if(createEvents==true){
             sendEvent(name:thisName, value: "Power On", descriptionText:"Device State On")
         }
+        logDebug"Seconds since last power on: " + ((now-state.lastOff)/1000)
+        state.offTime=state.offTime+(now-state.lastOff)
     }
     else
     {
@@ -113,13 +130,15 @@ def powerChange(evt)
         logDebug "Now: ${now}"
         logDebug "Timer: ${state.timer}"
         state.cycleCount = state.cycleCount+1
-        state.onTime= state.onTime + (now.toInteger() - state.timer.toInteger())
+        state.onTime= state.onTime + (now - state.timer)
         state.timer=0
         state.on=false
+        state.lastOff=now
         if(createEvents==true){
             sendEvent(name:thisName, value: "Power Off", descriptionText:"Device State Off")
         }
         }
+        logDebug "End of already powered IF"
     
     }
 }
@@ -132,6 +151,8 @@ def appButtonHandler(btn) {
               state.cycleCount=0    
               state.timer=0
               state.on=False
+              state.lastOff=now()
+              state.offTime=0
           break
       }
 }
